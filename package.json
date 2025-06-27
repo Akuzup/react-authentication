@@ -1,6 +1,6 @@
 {
   "name": "@inspireui/reactore-auth",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A reusable React authentication module with Firebase backend support",
   "main": "dist/src/index.js",
   "module": "dist/src/index.esm.js",

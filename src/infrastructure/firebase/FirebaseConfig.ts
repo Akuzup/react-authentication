@@ -10,11 +10,17 @@ import {
     GoogleAuthProvider,
     RecaptchaVerifier
 } from 'firebase/auth'
+import {
+    connectFirestoreEmulator,
+    Firestore,
+    getFirestore
+} from 'firebase/firestore'
 import { FirebaseConfig } from '../../config/AuthConfig'
 
 export class FirebaseConfigService {
   private static app: FirebaseApp | null = null
   private static auth: Auth | null = null
+  private static firestore: Firestore | null = null
   private static googleProvider: GoogleAuthProvider | null = null
   private static recaptchaVerifier: RecaptchaVerifier | null = null
 
@@ -30,9 +36,13 @@ export class FirebaseConfigService {
       // Initialize Auth
       this.auth = getAuth(this.app || undefined)
 
+      // Initialize Firestore
+      this.firestore = getFirestore(this.app!)
+
       // Connect to emulator in development
       if (useEmulator && !this.isEmulatorConnected()) {
         connectAuthEmulator(this.auth, 'http://localhost:9099')
+        connectFirestoreEmulator(this.firestore, 'localhost', 8080)
       }
 
       // Initialize Google provider
@@ -51,6 +61,13 @@ export class FirebaseConfigService {
       throw new Error('Firebase Auth not initialized. Call initialize() first.')
     }
     return this.auth
+  }
+
+  static getFirestore(): Firestore {
+    if (!this.firestore) {
+      throw new Error('Firestore not initialized. Call initialize() first.')
+    }
+    return this.firestore
   }
 
   static getGoogleProvider(): GoogleAuthProvider {
@@ -89,7 +106,7 @@ export class FirebaseConfigService {
   }
 
   static isInitialized(): boolean {
-    return this.app !== null && this.auth !== null
+    return this.app !== null && this.auth !== null && this.firestore !== null
   }
 
   private static isEmulatorConnected(): boolean {
@@ -101,6 +118,7 @@ export class FirebaseConfigService {
     this.clearRecaptchaVerifier()
     this.app = null
     this.auth = null
+    this.firestore = null
     this.googleProvider = null
   }
 }

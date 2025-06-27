@@ -3,46 +3,49 @@
  */
 
 import {
-    EmailAuthProvider,
-    User as FirebaseUser,
-    GoogleAuthProvider,
-    PhoneAuthProvider,
-    UserCredential,
-    createUserWithEmailAndPassword,
-    deleteUser,
-    linkWithCredential,
-    onAuthStateChanged,
-    reauthenticateWithCredential,
-    sendEmailVerification,
-    sendPasswordResetEmail,
-    signInWithCredential,
-    signInWithEmailAndPassword,
-    signInWithPhoneNumber,
-    signInWithPopup,
-    signOut,
-    unlink,
-    updatePassword,
-    updateProfile
+  EmailAuthProvider,
+  User as FirebaseUser,
+  GoogleAuthProvider,
+  PhoneAuthProvider,
+  UserCredential,
+  createUserWithEmailAndPassword,
+  deleteUser,
+  linkWithCredential,
+  onAuthStateChanged,
+  reauthenticateWithCredential,
+  sendEmailVerification,
+  sendPasswordResetEmail,
+  signInWithCredential,
+  signInWithEmailAndPassword,
+  signInWithPhoneNumber,
+  signInWithPopup,
+  signOut,
+  unlink,
+  updatePassword,
+  updateProfile
 } from 'firebase/auth'
 
 import { AuthError, AuthErrorFactory } from '../../core/entities/AuthError'
 import { User } from '../../core/entities/User'
 import {
-    AuthRepository,
-    LoginCredentials,
-    PasswordResetData,
-    RegisterData,
-    SMSVerificationResult
+  AuthRepository,
+  LoginCredentials,
+  PasswordResetData,
+  RegisterData,
+  SMSVerificationResult
 } from '../../core/interfaces/AuthRepository'
 import { FirebaseConfigService } from './FirebaseConfig'
 import { FirebaseUserMapper } from './FirebaseUserMapper'
+import { FirestoreUserRepository } from './FirestoreUserRepository'
 
 export class FirebaseAuthService implements AuthRepository {
   private authStateListeners: ((user: User | null) => void)[] = []
   private tokenRefreshListeners: ((token: string) => void)[] = []
   private errorListeners: ((error: AuthError) => void)[] = []
+  private userRepository: FirestoreUserRepository
 
   constructor() {
+    this.userRepository = new FirestoreUserRepository()
     this.setupAuthStateListener()
   }
 
@@ -55,7 +58,10 @@ export class FirebaseAuthService implements AuthRepository {
         credentials.password
       )
 
-      return FirebaseUserMapper.fromFirebaseUser(userCredential.user)
+      // Get additional user data from Firestore
+      const firestoreData = await this.userRepository.getUserById(userCredential.user.uid)
+
+      return FirebaseUserMapper.fromFirebaseUserWithFirestore(userCredential.user, firestoreData)
     } catch (error: any) {
       const authError = AuthErrorFactory.fromFirebaseError(error)
       this.notifyErrorListeners(authError)
@@ -69,7 +75,11 @@ export class FirebaseAuthService implements AuthRepository {
       const provider = FirebaseConfigService.getGoogleProvider()
 
       const userCredential: UserCredential = await signInWithPopup(auth, provider)
-      return FirebaseUserMapper.fromFirebaseUser(userCredential.user)
+
+      // Get additional user data from Firestore
+      const firestoreData = await this.userRepository.getUserById(userCredential.user.uid)
+
+      return FirebaseUserMapper.fromFirebaseUserWithFirestore(userCredential.user, firestoreData)
     } catch (error: any) {
       const authError = AuthErrorFactory.fromFirebaseError(error)
       this.notifyErrorListeners(authError)
@@ -135,7 +145,23 @@ export class FirebaseAuthService implements AuthRepository {
         })
       }
 
-      return FirebaseUserMapper.fromFirebaseUser(userCredential.user, userData)
+      // Create user document in Firestore
+      const firestoreUserData = {
+        id: userCredential.user.uid,
+        Email: userData.email,
+        DisplayName: userData.displayName || '',
+        FirstName: userData.firstName || '',
+        LastName: userData.lastName || '',
+        Username: userData.username || '',
+        PhoneNumber: userData.phoneNumber || '',
+        ProfilePicture: userData.photoURL || '',
+        CreatedAt: new Date().toISOString(),
+        deviceToken: userData.deviceToken || ''
+      }
+
+      await this.userRepository.saveUser(firestoreUserData)
+
+      return FirebaseUserMapper.fromFirebaseUserWithFirestore(userCredential.user, firestoreUserData, userData)
     } catch (error: any) {
       const authError = AuthErrorFactory.fromFirebaseError(error)
       this.notifyErrorListeners(authError)
@@ -164,7 +190,10 @@ export class FirebaseAuthService implements AuthRepository {
         return null
       }
 
-      return FirebaseUserMapper.fromFirebaseUser(firebaseUser)
+      // Get additional user data from Firestore
+      const firestoreData = await this.userRepository.getUserById(firebaseUser.uid)
+
+      return FirebaseUserMapper.fromFirebaseUserWithFirestore(firebaseUser, firestoreData)
     } catch (error: any) {
       const authError = AuthErrorFactory.fromFirebaseError(error)
       this.notifyErrorListeners(authError)

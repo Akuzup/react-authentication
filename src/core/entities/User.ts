@@ -14,43 +14,58 @@ export enum AuthProvider {
 export interface User {
   /** Unique identifier for the user */
   id: string
-  
+
   /** User's email address */
   email: string
-  
+
   /** User's display name */
   displayName?: string
-  
+
+  /** User's first name */
+  firstName?: string
+
+  /** User's last name */
+  lastName?: string
+
+  /** User's username */
+  username?: string
+
   /** URL to user's profile photo */
   photoURL?: string
-  
+
   /** User's phone number */
   phoneNumber?: string
-  
+
   /** Whether the user's email has been verified */
   emailVerified: boolean
-  
+
   /** Timestamp when the user account was created */
   createdAt: Date
-  
+
+  /** Timestamp when the user was last updated */
+  updatedAt?: Date
+
   /** Timestamp of the user's last login */
   lastLoginAt: Date
-  
+
   /** List of authentication providers used by this user */
   providers: AuthProvider[]
-  
+
+  /** Device token for push notifications */
+  deviceToken?: string
+
   /** Custom claims/roles assigned to the user */
   customClaims?: Record<string, any>
-  
+
   /** User's preferred language/locale */
   locale?: string
-  
+
   /** User's timezone */
   timezone?: string
-  
+
   /** Whether the user account is disabled */
   disabled?: boolean
-  
+
   /** Additional metadata */
   metadata?: Record<string, any>
 }
@@ -59,19 +74,41 @@ export interface CreateUserData {
   email: string
   password?: string
   displayName?: string
+  firstName?: string
+  lastName?: string
+  username?: string
   phoneNumber?: string
   photoURL?: string
   locale?: string
   timezone?: string
+  deviceToken?: string
 }
 
 export interface UpdateUserData {
   displayName?: string
+  firstName?: string
+  lastName?: string
+  username?: string
   photoURL?: string
   phoneNumber?: string
   locale?: string
   timezone?: string
+  deviceToken?: string
   metadata?: Record<string, any>
+}
+
+export interface FirestoreUserData {
+  id: string
+  Email: string
+  DisplayName?: string
+  FirstName?: string
+  LastName?: string
+  Username?: string
+  PhoneNumber?: string
+  ProfilePicture?: string
+  CreatedAt: string
+  UpdatedAt?: string
+  deviceToken?: string
 }
 
 export interface UserProfile {

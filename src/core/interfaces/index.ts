@@ -3,6 +3,8 @@
  */
 
 export * from './AuthRepository'
-export * from './StorageRepository'
 export * from './AuthService'
+export * from './StorageRepository'
+export * from './UserRepository'
 export * from './ValidationService'
+

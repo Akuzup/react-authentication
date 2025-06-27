@@ -2,8 +2,9 @@
 
 var jsxRuntime = require('react/jsx-runtime');
 var react = require('react');
-var app = require('firebase/app');
 var auth = require('firebase/auth');
+var app = require('firebase/app');
+var firestore = require('firebase/firestore');
 
 /**
  * User Entity - Core domain entity representing an authenticated user
@@ -676,9 +677,12 @@ class FirebaseConfigService {
             }
             // Initialize Auth
             this.auth = auth.getAuth(this.app || undefined);
+            // Initialize Firestore
+            this.firestore = firestore.getFirestore(this.app);
             // Connect to emulator in development
             if (useEmulator && !this.isEmulatorConnected()) {
                 auth.connectAuthEmulator(this.auth, 'http://localhost:9099');
+                firestore.connectFirestoreEmulator(this.firestore, 'localhost', 8080);
             }
             // Initialize Google provider
             this.googleProvider = new auth.GoogleAuthProvider();
@@ -695,6 +699,12 @@ class FirebaseConfigService {
             throw new Error('Firebase Auth not initialized. Call initialize() first.');
         }
         return this.auth;
+    }
+    static getFirestore() {
+        if (!this.firestore) {
+            throw new Error('Firestore not initialized. Call initialize() first.');
+        }
+        return this.firestore;
     }
     static getGoogleProvider() {
         if (!this.googleProvider) {
@@ -727,7 +737,7 @@ class FirebaseConfigService {
         }
     }
     static isInitialized() {
-        return this.app !== null && this.auth !== null;
+        return this.app !== null && this.auth !== null && this.firestore !== null;
     }
     static isEmulatorConnected() {
         // Check if emulator is already connected
@@ -737,11 +747,13 @@ class FirebaseConfigService {
         this.clearRecaptchaVerifier();
         this.app = null;
         this.auth = null;
+        this.firestore = null;
         this.googleProvider = null;
     }
 }
 FirebaseConfigService.app = null;
 FirebaseConfigService.auth = null;
+FirebaseConfigService.firestore = null;
 FirebaseConfigService.googleProvider = null;
 FirebaseConfigService.recaptchaVerifier = null;
 
@@ -760,12 +772,69 @@ class FirebaseUserMapper {
             id: firebaseUser.uid,
             email: firebaseUser.email || '',
             displayName: firebaseUser.displayName || undefined,
+            firstName: additionalData?.firstName,
+            lastName: additionalData?.lastName,
+            username: additionalData?.username,
             photoURL: firebaseUser.photoURL || undefined,
             phoneNumber: firebaseUser.phoneNumber || undefined,
             emailVerified: firebaseUser.emailVerified,
             createdAt,
             lastLoginAt,
+            updatedAt: additionalData?.updatedAt,
             providers,
+            deviceToken: additionalData?.deviceToken,
+            customClaims: additionalData?.customClaims,
+            locale: additionalData?.locale,
+            timezone: additionalData?.timezone,
+            disabled: false, // Firebase doesn't expose this in client SDK
+            metadata: {
+                ...additionalData?.metadata,
+                firebaseUid: firebaseUser.uid,
+                isAnonymous: firebaseUser.isAnonymous,
+                tenantId: firebaseUser.tenantId
+            }
+        };
+    }
+    static fromFirebaseUserWithFirestore(firebaseUser, firestoreData, additionalData) {
+        // Parse Firestore timestamps
+        let createdAt = new Date();
+        let updatedAt;
+        if (firestoreData?.CreatedAt) {
+            try {
+                createdAt = new Date(firestoreData.CreatedAt);
+            }
+            catch (error) {
+                console.warn('Failed to parse CreatedAt from Firestore:', error);
+            }
+        }
+        if (firestoreData?.UpdatedAt) {
+            try {
+                updatedAt = new Date(firestoreData.UpdatedAt);
+            }
+            catch (error) {
+                console.warn('Failed to parse UpdatedAt from Firestore:', error);
+            }
+        }
+        // Map Firebase providers to our AuthProvider enum
+        const providers = this.mapProviders(firebaseUser.providerData);
+        // Extract metadata
+        const metadata = firebaseUser.metadata;
+        const lastLoginAt = metadata.lastSignInTime ? new Date(metadata.lastSignInTime) : new Date();
+        return {
+            id: firebaseUser.uid,
+            email: firestoreData?.Email || firebaseUser.email || '',
+            displayName: firestoreData?.DisplayName || firebaseUser.displayName || undefined,
+            firstName: firestoreData?.FirstName,
+            lastName: firestoreData?.LastName,
+            username: firestoreData?.Username,
+            photoURL: firestoreData?.ProfilePicture || firebaseUser.photoURL || undefined,
+            phoneNumber: firestoreData?.PhoneNumber || firebaseUser.phoneNumber || undefined,
+            emailVerified: firebaseUser.emailVerified,
+            createdAt,
+            updatedAt,
+            lastLoginAt,
+            providers,
+            deviceToken: firestoreData?.deviceToken,
             customClaims: additionalData?.customClaims,
             locale: additionalData?.locale,
             timezone: additionalData?.timezone,
@@ -850,6 +919,117 @@ class FirebaseUserMapper {
 }
 
 /**
+ * FirestoreUserRepository - Implementation of UserRepository using Firestore
+ */
+class FirestoreUserRepository {
+    constructor() {
+        this.COLLECTION_NAME = 'Users';
+    }
+    async getUserById(userId) {
+        try {
+            const db = FirebaseConfigService.getFirestore();
+            const userDoc = firestore.doc(db, this.COLLECTION_NAME, userId);
+            const docSnap = await firestore.getDoc(userDoc);
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                return {
+                    id: docSnap.id,
+                    Email: data.Email || '',
+                    DisplayName: data.DisplayName,
+                    FirstName: data.FirstName,
+                    LastName: data.LastName,
+                    Username: data.Username,
+                    PhoneNumber: data.PhoneNumber,
+                    ProfilePicture: data.ProfilePicture,
+                    CreatedAt: data.CreatedAt,
+                    UpdatedAt: data.UpdatedAt,
+                    deviceToken: data.deviceToken
+                };
+            }
+            return null;
+        }
+        catch (error) {
+            console.error('Error getting user from Firestore:', error);
+            throw error;
+        }
+    }
+    async saveUser(userData) {
+        try {
+            const db = FirebaseConfigService.getFirestore();
+            const userDoc = firestore.doc(db, this.COLLECTION_NAME, userData.id);
+            const dataToSave = {
+                ...userData,
+                UpdatedAt: firestore.serverTimestamp()
+            };
+            await firestore.setDoc(userDoc, dataToSave, { merge: true });
+        }
+        catch (error) {
+            console.error('Error saving user to Firestore:', error);
+            throw error;
+        }
+    }
+    async updateUser(userId, userData) {
+        try {
+            const db = FirebaseConfigService.getFirestore();
+            const userDoc = firestore.doc(db, this.COLLECTION_NAME, userId);
+            const updateData = {
+                UpdatedAt: firestore.serverTimestamp()
+            };
+            // Map update data to Firestore field names
+            if (userData.displayName !== undefined) {
+                updateData.DisplayName = userData.displayName;
+            }
+            if (userData.firstName !== undefined) {
+                updateData.FirstName = userData.firstName;
+            }
+            if (userData.lastName !== undefined) {
+                updateData.LastName = userData.lastName;
+            }
+            if (userData.username !== undefined) {
+                updateData.Username = userData.username;
+            }
+            if (userData.phoneNumber !== undefined) {
+                updateData.PhoneNumber = userData.phoneNumber;
+            }
+            if (userData.photoURL !== undefined) {
+                updateData.ProfilePicture = userData.photoURL;
+            }
+            if (userData.deviceToken !== undefined) {
+                updateData.deviceToken = userData.deviceToken;
+            }
+            await firestore.updateDoc(userDoc, updateData);
+        }
+        catch (error) {
+            console.error('Error updating user in Firestore:', error);
+            throw error;
+        }
+    }
+    async deleteUser(userId) {
+        try {
+            const db = FirebaseConfigService.getFirestore();
+            const userDoc = firestore.doc(db, this.COLLECTION_NAME, userId);
+            await firestore.deleteDoc(userDoc);
+        }
+        catch (error) {
+            console.error('Error deleting user from Firestore:', error);
+            throw error;
+        }
+    }
+    async userExists(userId) {
+        try {
+            const db = FirebaseConfigService.getFirestore();
+            const userDoc = firestore.doc(db, this.COLLECTION_NAME, userId);
+            const docSnap = await firestore.getDoc(userDoc);
+            return docSnap.exists();
+        }
+        catch (error) {
+            console.error('Error checking if user exists in Firestore:', error);
+            return false;
+        }
+    }
+}
+
+/**
  * Firebase Auth Service - Implementation of AuthRepository using Firebase Auth
  */
 class FirebaseAuthService {
@@ -857,13 +1037,16 @@ class FirebaseAuthService {
         this.authStateListeners = [];
         this.tokenRefreshListeners = [];
         this.errorListeners = [];
+        this.userRepository = new FirestoreUserRepository();
         this.setupAuthStateListener();
     }
     async loginWithEmailPassword(credentials) {
         try {
             const auth$1 = FirebaseConfigService.getAuth();
             const userCredential = await auth.signInWithEmailAndPassword(auth$1, credentials.email, credentials.password);
-            return FirebaseUserMapper.fromFirebaseUser(userCredential.user);
+            // Get additional user data from Firestore
+            const firestoreData = await this.userRepository.getUserById(userCredential.user.uid);
+            return FirebaseUserMapper.fromFirebaseUserWithFirestore(userCredential.user, firestoreData);
         }
         catch (error) {
             const authError = AuthErrorFactory.fromFirebaseError(error);
@@ -876,7 +1059,9 @@ class FirebaseAuthService {
             const auth$1 = FirebaseConfigService.getAuth();
             const provider = FirebaseConfigService.getGoogleProvider();
             const userCredential = await auth.signInWithPopup(auth$1, provider);
-            return FirebaseUserMapper.fromFirebaseUser(userCredential.user);
+            // Get additional user data from Firestore
+            const firestoreData = await this.userRepository.getUserById(userCredential.user.uid);
+            return FirebaseUserMapper.fromFirebaseUserWithFirestore(userCredential.user, firestoreData);
         }
         catch (error) {
             const authError = AuthErrorFactory.fromFirebaseError(error);
@@ -928,7 +1113,21 @@ class FirebaseAuthService {
                     photoURL: userData.photoURL || null
                 });
             }
-            return FirebaseUserMapper.fromFirebaseUser(userCredential.user, userData);
+            // Create user document in Firestore
+            const firestoreUserData = {
+                id: userCredential.user.uid,
+                Email: userData.email,
+                DisplayName: userData.displayName || '',
+                FirstName: userData.firstName || '',
+                LastName: userData.lastName || '',
+                Username: userData.username || '',
+                PhoneNumber: userData.phoneNumber || '',
+                ProfilePicture: userData.photoURL || '',
+                CreatedAt: new Date().toISOString(),
+                deviceToken: userData.deviceToken || ''
+            };
+            await this.userRepository.saveUser(firestoreUserData);
+            return FirebaseUserMapper.fromFirebaseUserWithFirestore(userCredential.user, firestoreUserData, userData);
         }
         catch (error) {
             const authError = AuthErrorFactory.fromFirebaseError(error);
@@ -955,7 +1154,9 @@ class FirebaseAuthService {
             if (!firebaseUser) {
                 return null;
             }
-            return FirebaseUserMapper.fromFirebaseUser(firebaseUser);
+            // Get additional user data from Firestore
+            const firestoreData = await this.userRepository.getUserById(firebaseUser.uid);
+            return FirebaseUserMapper.fromFirebaseUserWithFirestore(firebaseUser, firestoreData);
         }
         catch (error) {
             const authError = AuthErrorFactory.fromFirebaseError(error);

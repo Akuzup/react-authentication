@@ -8,6 +8,7 @@ export declare class FirebaseAuthService implements AuthRepository {
     private authStateListeners;
     private tokenRefreshListeners;
     private errorListeners;
+    private userRepository;
     constructor();
     loginWithEmailPassword(credentials: LoginCredentials): Promise<User>;
     loginWithGoogle(): Promise<User>;
