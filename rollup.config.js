@@ -4,15 +4,15 @@ const typescript = require('@rollup/plugin-typescript')
 const peerDepsExternal = require('rollup-plugin-peer-deps-external')
 
 module.exports = {
-  input: 'index.ts',
+  input: 'src/index.ts',
   output: [
     {
-      file: 'dist/index.js',
+      file: 'dist/src/index.js',
       format: 'cjs',
       sourcemap: true
     },
     {
-      file: 'dist/index.esm.js',
+      file: 'dist/src/index.esm.js',
       format: 'esm',
       sourcemap: true
     }

@@ -1,17 +1,17 @@
-import React, { useState } from 'react'
 import { useAuth } from '@inspireui/reactore-auth'
-import { toast } from '../components/Toaster'
+import React, { useState } from 'react'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { toast } from '../components/Toaster'
 
 const ProfilePage: React.FC = () => {
-  const { 
-    user, 
-    updateProfile, 
-    sendEmailVerification, 
+  const {
+    user,
+    updateProfile,
+    sendEmailVerification,
     sendPasswordReset,
-    isLoading 
+    isLoading
   } = useAuth()
-  
+
   const [isUpdating, setIsUpdating] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   const [formData, setFormData] = useState({
@@ -45,7 +45,7 @@ const ProfilePage: React.FC = () => {
 
   const handleSendPasswordReset = async () => {
     if (!user?.email) return
-    
+
     try {
       await sendPasswordReset(user.email)
       toast.success('Email đặt lại mật khẩu đã được gửi!', 'Vui lòng kiểm tra hộp thư của bạn')
@@ -223,10 +223,10 @@ const ProfilePage: React.FC = () => {
             <div className="p-4 bg-gray-50 rounded-lg">
               <p className="font-medium text-gray-900 mb-2">Phương thức đăng nhập</p>
               <div className="space-y-2">
-                {user.providers.map((provider) => (
+                {user.providers.map((provider: any) => (
                   <div key={provider} className="flex items-center space-x-2">
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      {provider === 'email_password' ? 'Email/Password' : 
+                      {provider === 'email_password' ? 'Email/Password' :
                        provider === 'google' ? 'Google' :
                        provider === 'sms' ? 'SMS' : provider}
                     </span>
@@ -243,7 +243,7 @@ const ProfilePage: React.FC = () => {
         <h2 className="text-xl font-semibold text-gray-900 mb-6">
           Thống kê tài khoản
         </h2>
-        
+
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           <div className="text-center">
             <div className="text-2xl font-bold text-primary-600">
@@ -251,21 +251,21 @@ const ProfilePage: React.FC = () => {
             </div>
             <div className="text-sm text-gray-600">Phương thức đăng nhập</div>
           </div>
-          
+
           <div className="text-center">
             <div className="text-2xl font-bold text-primary-600">
               {user.emailVerified ? '✓' : '✗'}
             </div>
             <div className="text-sm text-gray-600">Email xác thực</div>
           </div>
-          
+
           <div className="text-center">
             <div className="text-2xl font-bold text-primary-600">
               {Math.floor((Date.now() - new Date(user.createdAt).getTime()) / (1000 * 60 * 60 * 24))}
             </div>
             <div className="text-sm text-gray-600">Ngày thành viên</div>
           </div>
-          
+
           <div className="text-center">
             <div className="text-2xl font-bold text-primary-600">
               {user.disabled ? 'Bị khóa' : 'Hoạt động'}

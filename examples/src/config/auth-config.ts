@@ -66,7 +66,7 @@ export const authConfig: AuthConfig = {
     'auth/too-many-requests': 'Quá nhiều yêu cầu. Vui lòng thử lại sau.'
   },
   callbacks: {
-    onLogin: (user) => {
+    onLogin: (user: any) => {
       console.log('User logged in:', user.email)
       // Analytics tracking, notifications, etc.
     },
@@ -74,11 +74,11 @@ export const authConfig: AuthConfig = {
       console.log('User logged out')
       // Clear app state, analytics, etc.
     },
-    onRegister: (user) => {
+    onRegister: (user: any) => {
       console.log('User registered:', user.email)
       // Welcome email, analytics, etc.
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Auth error:', error)
       // Show user-friendly message for network errors
       if (error.code === 'auth/network-request-failed') {

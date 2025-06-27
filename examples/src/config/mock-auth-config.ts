@@ -14,9 +14,10 @@ const mockFirebaseConfig = {
 export const mockAuthConfig: AuthConfig = {
   firebase: mockFirebaseConfig,
   providers: {
-    emailPassword: { 
+    emailPassword: {
       enabled: true,
       requireEmailVerification: false,
+      allowPasswordReset: true,
       passwordRequirements: {
         minLength: 6,
         requireUppercase: false,
@@ -25,18 +26,21 @@ export const mockAuthConfig: AuthConfig = {
         requireSpecialChars: false
       }
     },
-    google: { 
+    google: {
       enabled: false, // Disable for mock testing
       scopes: ['email', 'profile']
     },
-    sms: { 
+    sms: {
       enabled: false, // Disable for mock testing
-      defaultCountryCode: '+84'
+      timeout: 60,
+      codeLength: 6
     }
   },
   storage: {
     tokenKey: 'mock_auth_token',
     userKey: 'mock_auth_user',
+    refreshTokenKey: 'mock_auth_refresh_token',
+    sessionKey: 'mock_auth_session',
     prefix: 'mock_'
   },
   redirectUrls: {
@@ -46,14 +50,20 @@ export const mockAuthConfig: AuthConfig = {
   },
   security: {
     sessionTimeout: 24 * 60 * 60 * 1000, // 24 hours
-    requireEmailVerification: false,
-    passwordMinLength: 6,
-    enableBruteForceProtection: false // Disable for testing
+    tokenRefreshThreshold: 5 * 60 * 1000, // 5 minutes
+    maxLoginAttempts: 5,
+    lockoutDuration: 15 * 60 * 1000, // 15 minutes
+    requireSecureContext: false // Disable for testing
   },
   ui: {
     theme: 'light',
-    primaryColor: '#3b82f6',
-    borderRadius: '8px'
+    language: 'vi',
+    showProviderIcons: true,
+    allowRememberMe: true,
+    customStyles: {
+      primaryColor: '#3b82f6',
+      borderRadius: '8px'
+    }
   },
   debug: true, // Enable debug mode
   environment: 'development',
@@ -67,16 +77,16 @@ export const mockAuthConfig: AuthConfig = {
     'auth/network-request-failed': 'Lỗi kết nối mạng. Đang sử dụng chế độ demo.'
   },
   callbacks: {
-    onLogin: (user) => {
+    onLogin: (user: any) => {
       console.log('Mock: User logged in:', user.email)
     },
     onLogout: () => {
       console.log('Mock: User logged out')
     },
-    onRegister: (user) => {
+    onRegister: (user: any) => {
       console.log('Mock: User registered:', user.email)
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.warn('Mock: Auth error:', error)
     }
   }

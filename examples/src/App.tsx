@@ -45,7 +45,7 @@ function App() {
   return (
     <AuthProvider
       config={authConfig}
-      onAuthStateChange={(state) => {
+      onAuthStateChange={(state: any) => {
         console.log('📊 Auth state changed:', state)
         console.log('📊 User:', state.user)
         console.log('📊 Loading:', state.isLoading)
