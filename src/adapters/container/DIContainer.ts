@@ -6,21 +6,21 @@ import { AuthConfig } from '../../config/AuthConfig'
 
 // Core interfaces
 import { AuthRepository } from '../../core/interfaces/AuthRepository'
+import { AuthService } from '../../core/interfaces/AuthService'
 import { StorageRepository } from '../../core/interfaces/StorageRepository'
 import { ValidationService } from '../../core/interfaces/ValidationService'
-import { AuthService } from '../../core/interfaces/AuthService'
 
 // Use cases
-import { 
-  LoginUseCase,
-  RegisterUseCase,
-  GoogleLoginUseCase,
-  SMSLoginUseCase,
-  LogoutUseCase
+import {
+    GoogleLoginUseCase,
+    LoginUseCase,
+    LogoutUseCase,
+    RegisterUseCase,
+    SMSLoginUseCase
 } from '../../core/usecases'
 
 // Infrastructure
-import { FirebaseConfigService, FirebaseAuthService } from '../../infrastructure/firebase'
+import { FirebaseAuthService, FirebaseConfigService } from '../../infrastructure/firebase'
 import { LocalStorageService } from '../../infrastructure/storage'
 import { ValidationServiceImpl } from '../../infrastructure/validation'
 
@@ -106,7 +106,8 @@ export class DIContainer {
       this.resolve('RegisterUseCase'),
       this.resolve('GoogleLoginUseCase'),
       this.resolve('SMSLoginUseCase'),
-      this.resolve('LogoutUseCase')
+      this.resolve('LogoutUseCase'),
+      this.resolve('AuthRepository')
     ))
   }
 

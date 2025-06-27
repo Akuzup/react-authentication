@@ -2,25 +2,26 @@
  * Auth Service Adapter - Implements AuthService interface using Use Cases
  */
 
-import { User, UpdateUserData } from '../../core/entities/User'
-import { AuthState, AuthStateStatus } from '../../core/entities/AuthState'
 import { AuthError } from '../../core/entities/AuthError'
-import { 
+import { AuthState } from '../../core/entities/AuthState'
+import { UpdateUserData, User } from '../../core/entities/User'
+import { AuthRepository } from '../../core/interfaces/AuthRepository'
+import {
   AuthService,
+  ChangePasswordRequest,
   LoginRequest,
+  PasswordResetRequest,
   RegisterRequest,
   SMSLoginRequest,
-  SMSVerificationRequest,
-  PasswordResetRequest,
-  ChangePasswordRequest
+  SMSVerificationRequest
 } from '../../core/interfaces/AuthService'
 
-import { 
-  LoginUseCase,
-  RegisterUseCase,
+import {
   GoogleLoginUseCase,
-  SMSLoginUseCase,
-  LogoutUseCase
+  LoginUseCase,
+  LogoutUseCase,
+  RegisterUseCase,
+  SMSLoginUseCase
 } from '../../core/usecases'
 
 export class AuthServiceAdapter implements AuthService {
@@ -35,25 +36,29 @@ export class AuthServiceAdapter implements AuthService {
 
   private authStateListeners: ((state: AuthState) => void)[] = []
   private errorListeners: ((error: AuthError) => void)[] = []
+  private firebaseUnsubscribe?: () => void
 
   constructor(
     private loginUseCase: LoginUseCase,
     private registerUseCase: RegisterUseCase,
     private googleLoginUseCase: GoogleLoginUseCase,
     private smsLoginUseCase: SMSLoginUseCase,
-    private logoutUseCase: LogoutUseCase
-  ) {}
+    private logoutUseCase: LogoutUseCase,
+    private authRepository: AuthRepository
+  ) {
+    this.setupFirebaseAuthStateListener()
+  }
 
   async login(request: LoginRequest): Promise<User> {
     try {
       this.updateAuthState({ isLoading: true, error: null })
-      
+
       const response = await this.loginUseCase.execute({
         email: request.email,
         password: request.password,
         rememberMe: request.rememberMe
       })
-      
+
       this.updateAuthState({
         user: response.user,
         isLoading: false,
@@ -61,12 +66,12 @@ export class AuthServiceAdapter implements AuthService {
         isSessionValid: true,
         sessionToken: response.token
       })
-      
+
       return response.user
     } catch (error) {
       const authError = error as AuthError
-      this.updateAuthState({ 
-        isLoading: false, 
+      this.updateAuthState({
+        isLoading: false,
         error: authError,
         isAuthenticated: false,
         isSessionValid: false
@@ -79,9 +84,9 @@ export class AuthServiceAdapter implements AuthService {
   async loginWithGoogle(): Promise<User> {
     try {
       this.updateAuthState({ isLoading: true, error: null })
-      
+
       const response = await this.googleLoginUseCase.execute()
-      
+
       this.updateAuthState({
         user: response.user,
         isLoading: false,
@@ -89,12 +94,12 @@ export class AuthServiceAdapter implements AuthService {
         isSessionValid: true,
         sessionToken: response.token
       })
-      
+
       return response.user
     } catch (error) {
       const authError = error as AuthError
-      this.updateAuthState({ 
-        isLoading: false, 
+      this.updateAuthState({
+        isLoading: false,
         error: authError,
         isAuthenticated: false,
         isSessionValid: false
@@ -107,14 +112,14 @@ export class AuthServiceAdapter implements AuthService {
   async initiateSMSLogin(request: SMSLoginRequest): Promise<{ verificationId: string }> {
     try {
       this.updateAuthState({ isLoading: true, error: null })
-      
+
       const response = await this.smsLoginUseCase.initiate({
         phoneNumber: request.phoneNumber,
         countryCode: request.countryCode
       })
-      
+
       this.updateAuthState({ isLoading: false })
-      
+
       return { verificationId: response.verificationId }
     } catch (error) {
       const authError = error as AuthError
@@ -127,13 +132,13 @@ export class AuthServiceAdapter implements AuthService {
   async completeSMSLogin(request: SMSVerificationRequest): Promise<User> {
     try {
       this.updateAuthState({ isLoading: true, error: null })
-      
+
       const response = await this.smsLoginUseCase.complete({
         verificationId: request.verificationId,
         code: request.code,
         rememberMe: false // Can be added to request if needed
       })
-      
+
       this.updateAuthState({
         user: response.user,
         isLoading: false,
@@ -141,12 +146,12 @@ export class AuthServiceAdapter implements AuthService {
         isSessionValid: true,
         sessionToken: response.token
       })
-      
+
       return response.user
     } catch (error) {
       const authError = error as AuthError
-      this.updateAuthState({ 
-        isLoading: false, 
+      this.updateAuthState({
+        isLoading: false,
         error: authError,
         isAuthenticated: false,
         isSessionValid: false
@@ -159,9 +164,9 @@ export class AuthServiceAdapter implements AuthService {
   async register(request: RegisterRequest): Promise<User> {
     try {
       this.updateAuthState({ isLoading: true, error: null })
-      
+
       const response = await this.registerUseCase.execute(request)
-      
+
       this.updateAuthState({
         user: response.user,
         isLoading: false,
@@ -169,12 +174,12 @@ export class AuthServiceAdapter implements AuthService {
         isSessionValid: true,
         sessionToken: response.token
       })
-      
+
       return response.user
     } catch (error) {
       const authError = error as AuthError
-      this.updateAuthState({ 
-        isLoading: false, 
+      this.updateAuthState({
+        isLoading: false,
         error: authError,
         isAuthenticated: false,
         isSessionValid: false
@@ -187,15 +192,13 @@ export class AuthServiceAdapter implements AuthService {
   async logout(): Promise<void> {
     try {
       this.updateAuthState({ isLoading: true, error: null })
-      
+
       await this.logoutUseCase.execute()
-      
+
+      // Note: Firebase auth state listener will handle updating the state
+      // when Firebase auth state changes to null after logout
       this.updateAuthState({
-        user: null,
         isLoading: false,
-        isAuthenticated: false,
-        isSessionValid: false,
-        sessionToken: undefined,
         error: null
       })
     } catch (error) {
@@ -207,7 +210,48 @@ export class AuthServiceAdapter implements AuthService {
   }
 
   async getCurrentAuthState(): Promise<AuthState> {
+    try {
+      // Get current user from Firebase to ensure we have the latest state
+      const currentUser = await this.authRepository.getCurrentUser()
+
+      // Always update our local state to match Firebase
+      this.updateAuthState({
+        user: currentUser,
+        isAuthenticated: currentUser !== null,
+        isSessionValid: currentUser !== null,
+        isInitialized: true,
+        isLoading: false
+      })
+
+      console.log('getCurrentAuthState:', currentUser ? 'User found' : 'No user', 'isAuthenticated:', currentUser !== null)
+    } catch (error) {
+      console.error('Error getting current auth state:', error)
+      this.updateAuthState({
+        isInitialized: true,
+        isLoading: false,
+        error: error as AuthError
+      })
+    }
+
     return { ...this.currentAuthState }
+  }
+
+  private setupFirebaseAuthStateListener(): void {
+    try {
+      this.firebaseUnsubscribe = this.authRepository.onAuthStateChanged((user: User | null) => {
+        console.log('Firebase auth state changed:', user ? 'Authenticated' : 'Unauthenticated')
+
+        this.updateAuthState({
+          user,
+          isAuthenticated: user !== null,
+          isSessionValid: user !== null,
+          isInitialized: true,
+          isLoading: false
+        })
+      })
+    } catch (error) {
+      console.error('Error setting up Firebase auth state listener:', error)
+    }
   }
 
   async refreshSession(): Promise<User> {
@@ -261,10 +305,10 @@ export class AuthServiceAdapter implements AuthService {
 
   onAuthStateChange(callback: (state: AuthState) => void): () => void {
     this.authStateListeners.push(callback)
-    
+
     // Immediately call with current state
     callback(this.currentAuthState)
-    
+
     return () => {
       const index = this.authStateListeners.indexOf(callback)
       if (index > -1) {
@@ -275,7 +319,7 @@ export class AuthServiceAdapter implements AuthService {
 
   onAuthError(callback: (error: AuthError) => void): () => void {
     this.errorListeners.push(callback)
-    
+
     return () => {
       const index = this.errorListeners.indexOf(callback)
       if (index > -1) {
@@ -312,12 +356,12 @@ export class AuthServiceAdapter implements AuthService {
       ...updates,
       lastChecked: new Date()
     }
-    
+
     // Update isAuthenticated based on user presence
     if (updates.user !== undefined) {
       this.currentAuthState.isAuthenticated = updates.user !== null
     }
-    
+
     this.notifyAuthStateListeners(this.currentAuthState)
   }
 
@@ -339,5 +383,16 @@ export class AuthServiceAdapter implements AuthService {
         console.error('Error in error listener:', listenerError)
       }
     })
+  }
+
+  /**
+   * Cleanup method to unsubscribe from Firebase auth state changes
+   * Should be called when the service is no longer needed
+   */
+  cleanup(): void {
+    if (this.firebaseUnsubscribe) {
+      this.firebaseUnsubscribe()
+      this.firebaseUnsubscribe = undefined
+    }
   }
 }

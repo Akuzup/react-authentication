@@ -83,8 +83,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
         const service = container.getAuthService()
         setAuthService(service)
 
+        // Get initial auth state first
+        const initialState = await service.getCurrentAuthState()
+        setAuthState({ ...initialState, isInitialized: true })
+
+        // Call onAuthStateChange with initial state
+        onAuthStateChange?.({ ...initialState, isInitialized: true })
+
         // Subscribe to auth state changes
         const unsubscribe = service.onAuthStateChange((state) => {
+          console.log('AuthProvider received state change:', state.isAuthenticated ? 'Authenticated' : 'Not authenticated')
           setAuthState(state)
           onAuthStateChange?.(state)
         })
@@ -94,10 +102,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
           setAuthState(prev => ({ ...prev, error }))
           onError?.(error)
         })
-
-        // Get initial auth state
-        const initialState = await service.getCurrentAuthState()
-        setAuthState({ ...initialState, isInitialized: true })
 
         cleanup = () => {
           unsubscribe()

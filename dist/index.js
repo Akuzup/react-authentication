@@ -2028,12 +2028,13 @@ class AuthRepositoryAdapter {
  * Auth Service Adapter - Implements AuthService interface using Use Cases
  */
 class AuthServiceAdapter {
-    constructor(loginUseCase, registerUseCase, googleLoginUseCase, smsLoginUseCase, logoutUseCase) {
+    constructor(loginUseCase, registerUseCase, googleLoginUseCase, smsLoginUseCase, logoutUseCase, authRepository) {
         this.loginUseCase = loginUseCase;
         this.registerUseCase = registerUseCase;
         this.googleLoginUseCase = googleLoginUseCase;
         this.smsLoginUseCase = smsLoginUseCase;
         this.logoutUseCase = logoutUseCase;
+        this.authRepository = authRepository;
         this.currentAuthState = {
             user: null,
             isLoading: false,
@@ -2044,6 +2045,7 @@ class AuthServiceAdapter {
         };
         this.authStateListeners = [];
         this.errorListeners = [];
+        this.setupFirebaseAuthStateListener();
     }
     async login(request) {
         try {
@@ -2174,12 +2176,10 @@ class AuthServiceAdapter {
         try {
             this.updateAuthState({ isLoading: true, error: null });
             await this.logoutUseCase.execute();
+            // Note: Firebase auth state listener will handle updating the state
+            // when Firebase auth state changes to null after logout
             this.updateAuthState({
-                user: null,
                 isLoading: false,
-                isAuthenticated: false,
-                isSessionValid: false,
-                sessionToken: undefined,
                 error: null
             });
         }
@@ -2191,7 +2191,45 @@ class AuthServiceAdapter {
         }
     }
     async getCurrentAuthState() {
+        try {
+            // Get current user from Firebase to ensure we have the latest state
+            const currentUser = await this.authRepository.getCurrentUser();
+            // Always update our local state to match Firebase
+            this.updateAuthState({
+                user: currentUser,
+                isAuthenticated: currentUser !== null,
+                isSessionValid: currentUser !== null,
+                isInitialized: true,
+                isLoading: false
+            });
+            console.log('getCurrentAuthState:', currentUser ? 'User found' : 'No user', 'isAuthenticated:', currentUser !== null);
+        }
+        catch (error) {
+            console.error('Error getting current auth state:', error);
+            this.updateAuthState({
+                isInitialized: true,
+                isLoading: false,
+                error: error
+            });
+        }
         return { ...this.currentAuthState };
+    }
+    setupFirebaseAuthStateListener() {
+        try {
+            this.firebaseUnsubscribe = this.authRepository.onAuthStateChanged((user) => {
+                console.log('Firebase auth state changed:', user ? 'Authenticated' : 'Unauthenticated');
+                this.updateAuthState({
+                    user,
+                    isAuthenticated: user !== null,
+                    isSessionValid: user !== null,
+                    isInitialized: true,
+                    isLoading: false
+                });
+            });
+        }
+        catch (error) {
+            console.error('Error setting up Firebase auth state listener:', error);
+        }
     }
     async refreshSession() {
         // Implementation would use refresh token use case
@@ -2301,6 +2339,16 @@ class AuthServiceAdapter {
             }
         });
     }
+    /**
+     * Cleanup method to unsubscribe from Firebase auth state changes
+     * Should be called when the service is no longer needed
+     */
+    cleanup() {
+        if (this.firebaseUnsubscribe) {
+            this.firebaseUnsubscribe();
+            this.firebaseUnsubscribe = undefined;
+        }
+    }
 }
 
 /**
@@ -2341,7 +2389,7 @@ class DIContainer {
         this.register('SMSLoginUseCase', new SMSLoginUseCase(this.resolve('AuthRepository'), this.resolve('ValidationService'), this.resolve('StorageRepository')));
         this.register('LogoutUseCase', new LogoutUseCase(this.resolve('AuthRepository'), this.resolve('StorageRepository')));
         // Register service adapters
-        this.register('AuthService', new AuthServiceAdapter(this.resolve('LoginUseCase'), this.resolve('RegisterUseCase'), this.resolve('GoogleLoginUseCase'), this.resolve('SMSLoginUseCase'), this.resolve('LogoutUseCase')));
+        this.register('AuthService', new AuthServiceAdapter(this.resolve('LoginUseCase'), this.resolve('RegisterUseCase'), this.resolve('GoogleLoginUseCase'), this.resolve('SMSLoginUseCase'), this.resolve('LogoutUseCase'), this.resolve('AuthRepository')));
     }
     register(key, instance) {
         this.dependencies.set(key, instance);
@@ -2420,8 +2468,14 @@ const AuthProvider = ({ config, children, onAuthStateChange, onError }) => {
                 container.initialize(config);
                 const service = container.getAuthService();
                 setAuthService(service);
+                // Get initial auth state first
+                const initialState = await service.getCurrentAuthState();
+                setAuthState({ ...initialState, isInitialized: true });
+                // Call onAuthStateChange with initial state
+                onAuthStateChange?.({ ...initialState, isInitialized: true });
                 // Subscribe to auth state changes
                 const unsubscribe = service.onAuthStateChange((state) => {
+                    console.log('AuthProvider received state change:', state.isAuthenticated ? 'Authenticated' : 'Not authenticated');
                     setAuthState(state);
                     onAuthStateChange?.(state);
                 });
@@ -2430,9 +2484,6 @@ const AuthProvider = ({ config, children, onAuthStateChange, onError }) => {
                     setAuthState(prev => ({ ...prev, error }));
                     onError?.(error);
                 });
-                // Get initial auth state
-                const initialState = await service.getCurrentAuthState();
-                setAuthState({ ...initialState, isInitialized: true });
                 cleanup = () => {
                     unsubscribe();
                     unsubscribeError();

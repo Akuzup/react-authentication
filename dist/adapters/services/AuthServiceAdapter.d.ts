@@ -1,21 +1,24 @@
 /**
  * Auth Service Adapter - Implements AuthService interface using Use Cases
  */
-import { User, UpdateUserData } from '../../core/entities/User';
-import { AuthState } from '../../core/entities/AuthState';
 import { AuthError } from '../../core/entities/AuthError';
-import { AuthService, LoginRequest, RegisterRequest, SMSLoginRequest, SMSVerificationRequest, PasswordResetRequest, ChangePasswordRequest } from '../../core/interfaces/AuthService';
-import { LoginUseCase, RegisterUseCase, GoogleLoginUseCase, SMSLoginUseCase, LogoutUseCase } from '../../core/usecases';
+import { AuthState } from '../../core/entities/AuthState';
+import { UpdateUserData, User } from '../../core/entities/User';
+import { AuthRepository } from '../../core/interfaces/AuthRepository';
+import { AuthService, ChangePasswordRequest, LoginRequest, PasswordResetRequest, RegisterRequest, SMSLoginRequest, SMSVerificationRequest } from '../../core/interfaces/AuthService';
+import { GoogleLoginUseCase, LoginUseCase, LogoutUseCase, RegisterUseCase, SMSLoginUseCase } from '../../core/usecases';
 export declare class AuthServiceAdapter implements AuthService {
     private loginUseCase;
     private registerUseCase;
     private googleLoginUseCase;
     private smsLoginUseCase;
     private logoutUseCase;
+    private authRepository;
     private currentAuthState;
     private authStateListeners;
     private errorListeners;
-    constructor(loginUseCase: LoginUseCase, registerUseCase: RegisterUseCase, googleLoginUseCase: GoogleLoginUseCase, smsLoginUseCase: SMSLoginUseCase, logoutUseCase: LogoutUseCase);
+    private firebaseUnsubscribe?;
+    constructor(loginUseCase: LoginUseCase, registerUseCase: RegisterUseCase, googleLoginUseCase: GoogleLoginUseCase, smsLoginUseCase: SMSLoginUseCase, logoutUseCase: LogoutUseCase, authRepository: AuthRepository);
     login(request: LoginRequest): Promise<User>;
     loginWithGoogle(): Promise<User>;
     initiateSMSLogin(request: SMSLoginRequest): Promise<{
@@ -25,6 +28,7 @@ export declare class AuthServiceAdapter implements AuthService {
     register(request: RegisterRequest): Promise<User>;
     logout(): Promise<void>;
     getCurrentAuthState(): Promise<AuthState>;
+    private setupFirebaseAuthStateListener;
     refreshSession(): Promise<User>;
     validateSession(): Promise<boolean>;
     requestPasswordReset(request: PasswordResetRequest): Promise<void>;
@@ -45,5 +49,10 @@ export declare class AuthServiceAdapter implements AuthService {
     private updateAuthState;
     private notifyAuthStateListeners;
     private notifyErrorListeners;
+    /**
+     * Cleanup method to unsubscribe from Firebase auth state changes
+     * Should be called when the service is no longer needed
+     */
+    cleanup(): void;
 }
 //# sourceMappingURL=AuthServiceAdapter.d.ts.map

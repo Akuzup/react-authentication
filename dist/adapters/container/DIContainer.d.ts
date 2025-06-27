@@ -3,10 +3,10 @@
  */
 import { AuthConfig } from '../../config/AuthConfig';
 import { AuthRepository } from '../../core/interfaces/AuthRepository';
+import { AuthService } from '../../core/interfaces/AuthService';
 import { StorageRepository } from '../../core/interfaces/StorageRepository';
 import { ValidationService } from '../../core/interfaces/ValidationService';
-import { AuthService } from '../../core/interfaces/AuthService';
-import { LoginUseCase, RegisterUseCase, GoogleLoginUseCase, SMSLoginUseCase, LogoutUseCase } from '../../core/usecases';
+import { GoogleLoginUseCase, LoginUseCase, LogoutUseCase, RegisterUseCase, SMSLoginUseCase } from '../../core/usecases';
 export declare class DIContainer {
     private static instance;
     private dependencies;
