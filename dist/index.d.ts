@@ -14,7 +14,10 @@ export { DIContainer } from './adapters/container/DIContainer';
 export { FirebaseConfigService } from './infrastructure/firebase/FirebaseConfig';
 export { LocalStorageService } from './infrastructure/storage/LocalStorageService';
 export { ValidationServiceImpl } from './infrastructure/validation/ValidationServiceImpl';
-export { AuthGuard, LoginForm, ProtectedRoute, PublicRoute, RegisterForm, VerifiedRoute } from './presentation/components';
+export { AuthGuard, ProtectedRoute, PublicRoute, VerifiedRoute } from './presentation/components';
+export { ForgotPasswordForm } from './presentation/components/ForgotPasswordForm';
+export { LoginForm } from './presentation/components/LoginForm';
+export { RegisterForm } from './presentation/components/RegisterForm';
 export { AuthProvider, useAuth } from './presentation/providers/AuthContext';
-export type { AuthConfig, AuthContextValue, AuthError, AuthGuardProps, AuthState, LoginFormProps, RegisterFormProps, User } from './presentation/types';
+export type { AuthConfig, AuthContextValue, AuthError, AuthGuardProps, AuthState, ForgotPasswordFormProps, LoginFormProps, RegisterFormProps, User } from './presentation/types';
 //# sourceMappingURL=index.d.ts.map

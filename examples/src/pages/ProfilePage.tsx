@@ -1,6 +1,5 @@
 import { useAuth } from '@inspireui/reactore-auth'
-import React, { useState } from 'react'
-import LoadingSpinner from '../components/LoadingSpinner'
+import React, { useEffect, useState } from 'react'
 import { toast } from '../components/Toaster'
 
 const ProfilePage: React.FC = () => {
@@ -8,8 +7,7 @@ const ProfilePage: React.FC = () => {
     user,
     updateProfile,
     sendEmailVerification,
-    sendPasswordReset,
-    isLoading
+    sendPasswordReset
   } = useAuth()
 
   const [isUpdating, setIsUpdating] = useState(false)
@@ -18,6 +16,27 @@ const ProfilePage: React.FC = () => {
     displayName: user?.displayName || '',
     phoneNumber: user?.phoneNumber || ''
   })
+
+  // Debug logging để track user state
+  useEffect(() => {
+    console.log('🔍 ProfilePage - User state:', {
+      hasUser: !!user,
+      userEmail: user?.email,
+      userDisplayName: user?.displayName,
+      timestamp: new Date().toISOString()
+    })
+  }, [user])
+
+  // Update form data when user changes
+  useEffect(() => {
+    if (user) {
+      console.log('🔄 ProfilePage - Updating form data for user:', user.email)
+      setFormData({
+        displayName: user.displayName || '',
+        phoneNumber: user.phoneNumber || ''
+      })
+    }
+  }, [user])
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault()

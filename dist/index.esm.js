@@ -1,4 +1,4 @@
-import { jsx, jsxs, Fragment } from 'react/jsx-runtime';
+import { jsx, Fragment, jsxs } from 'react/jsx-runtime';
 import { createContext, useState, useEffect, useContext } from 'react';
 import { getAuth, connectAuthEmulator, GoogleAuthProvider, RecaptchaVerifier, signInWithEmailAndPassword, signInWithPopup, signInWithPhoneNumber, PhoneAuthProvider, signInWithCredential, createUserWithEmailAndPassword, updateProfile, signOut, sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential, updatePassword, sendEmailVerification, deleteUser, linkWithCredential, unlink, onAuthStateChanged } from 'firebase/auth';
 import { getApps, initializeApp } from 'firebase/app';
@@ -2598,6 +2598,149 @@ const useAuth = () => {
 // Alias for backward compatibility
 const useAuthContext = useAuth;
 
+/**
+ * useAuthState Hook - Hook for auth state only (no actions)
+ */
+const useAuthState = () => {
+    const { user, isLoading, isAuthenticated, error, isInitialized } = useAuth();
+    return {
+        user,
+        isLoading,
+        isAuthenticated,
+        error,
+        isInitialized
+    };
+};
+
+const AuthGuard = ({ children, requireAuth = true, requireEmailVerification = false, requiredPermissions = [], fallback, loadingComponent, unauthorizedComponent, redirectTo, onUnauthorized }) => {
+    const { user, isLoading, isAuthenticated, isInitialized } = useAuthState();
+    // Show loading while initializing
+    if (!isInitialized || isLoading) {
+        if (loadingComponent) {
+            return jsx(Fragment, { children: loadingComponent });
+        }
+        return (jsxs("div", { className: "auth-guard-loading flex items-center justify-center min-h-screen", children: [jsx("div", { className: "animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" }), jsx("span", { className: "ml-2 text-gray-600", children: "Loading..." })] }));
+    }
+    // Check authentication requirement
+    if (requireAuth && !isAuthenticated) {
+        if (redirectTo && typeof window !== 'undefined') {
+            window.location.href = redirectTo;
+            return null;
+        }
+        if (onUnauthorized) {
+            onUnauthorized();
+        }
+        if (unauthorizedComponent) {
+            return jsx(Fragment, { children: unauthorizedComponent });
+        }
+        if (fallback) {
+            return jsx(Fragment, { children: fallback });
+        }
+        return (jsx("div", { className: "auth-guard-unauthorized flex items-center justify-center min-h-screen", children: jsxs("div", { className: "text-center", children: [jsx("h2", { className: "text-xl font-semibold text-gray-900 mb-2", children: "Authentication Required" }), jsx("p", { className: "text-gray-600", children: "Please sign in to access this page." })] }) }));
+    }
+    // Check email verification requirement
+    if (requireEmailVerification && user && !user.emailVerified) {
+        if (unauthorizedComponent) {
+            return jsx(Fragment, { children: unauthorizedComponent });
+        }
+        if (fallback) {
+            return jsx(Fragment, { children: fallback });
+        }
+        return (jsx("div", { className: "auth-guard-email-verification flex items-center justify-center min-h-screen", children: jsxs("div", { className: "text-center max-w-md mx-auto px-4", children: [jsx("div", { className: "mb-4", children: jsx("svg", { className: "h-12 w-12 text-yellow-500 mx-auto", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", children: jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" }) }) }), jsx("h2", { className: "text-xl font-semibold text-gray-900 mb-2", children: "Email Verification Required" }), jsx("p", { className: "text-gray-600 mb-4", children: "Please verify your email address to access this page. Check your inbox for a verification link." }), jsx("button", { onClick: () => {
+                            // This would trigger email verification resend
+                            // Implementation depends on how you want to handle this
+                        }, className: "text-blue-600 hover:text-blue-500 text-sm font-medium", children: "Resend verification email" })] }) }));
+    }
+    // Check permission requirements
+    if (requiredPermissions.length > 0 && user) {
+        // This is a simplified permission check
+        // In a real implementation, you'd check user.customClaims or call a permission service
+        const userPermissions = user.customClaims?.permissions || [];
+        const hasAllPermissions = requiredPermissions.every(permission => userPermissions.includes(permission));
+        if (!hasAllPermissions) {
+            if (onUnauthorized) {
+                onUnauthorized();
+            }
+            if (unauthorizedComponent) {
+                return jsx(Fragment, { children: unauthorizedComponent });
+            }
+            if (fallback) {
+                return jsx(Fragment, { children: fallback });
+            }
+            return (jsx("div", { className: "auth-guard-insufficient-permissions flex items-center justify-center min-h-screen", children: jsxs("div", { className: "text-center", children: [jsx("div", { className: "mb-4", children: jsx("svg", { className: "h-12 w-12 text-red-500 mx-auto", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", children: jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 15v2m-6 0h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" }) }) }), jsx("h2", { className: "text-xl font-semibold text-gray-900 mb-2", children: "Insufficient Permissions" }), jsx("p", { className: "text-gray-600", children: "You don't have the required permissions to access this page." })] }) }));
+        }
+    }
+    // All checks passed, render children
+    return jsx(Fragment, { children: children });
+};
+// Convenience components for common use cases
+const ProtectedRoute = ({ children, fallback }) => (jsx(AuthGuard, { requireAuth: true, fallback: fallback, children: children }));
+const PublicRoute = ({ children }) => (jsx(AuthGuard, { requireAuth: false, children: children }));
+const VerifiedRoute = ({ children, fallback }) => (jsx(AuthGuard, { requireAuth: true, requireEmailVerification: true, fallback: fallback, children: children }));
+
+const ForgotPasswordForm = ({ onSuccess, onError, onCancel, className = '', disabled = false, showBackToLogin = true }) => {
+    const { sendPasswordReset, isLoading } = useAuth();
+    const [email, setEmail] = useState('');
+    const [errors, setErrors] = useState({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isEmailSent, setIsEmailSent] = useState(false);
+    const validateEmail = (email) => {
+        if (!email.trim()) {
+            setErrors({ email: 'Email is required' });
+            return false;
+        }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            setErrors({ email: 'Please enter a valid email address' });
+            return false;
+        }
+        return true;
+    };
+    const handleInputChange = (e) => {
+        const value = e.target.value;
+        setEmail(value);
+        // Clear error when user starts typing
+        if (errors.email) {
+            setErrors({});
+        }
+    };
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!validateEmail(email) || isSubmitting || disabled) {
+            return;
+        }
+        setIsSubmitting(true);
+        setErrors({});
+        try {
+            await sendPasswordReset(email);
+            setIsEmailSent(true);
+            onSuccess?.(email);
+        }
+        catch (error) {
+            const authError = error;
+            onError?.(authError);
+            setErrors({ general: authError.message });
+        }
+        finally {
+            setIsSubmitting(false);
+        }
+    };
+    const handleTryAgain = () => {
+        setIsEmailSent(false);
+        setEmail('');
+        setErrors({});
+    };
+    const isFormDisabled = isLoading || isSubmitting || disabled;
+    if (isEmailSent) {
+        return (jsx("div", { className: `forgot-password-form ${className}`, children: jsxs("div", { className: "text-center space-y-4", children: [jsx("div", { className: "w-16 h-16 mx-auto bg-green-100 rounded-full flex items-center justify-center", children: jsx("svg", { className: "w-8 h-8 text-green-600", fill: "none", stroke: "currentColor", viewBox: "0 0 24 24", children: jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M5 13l4 4L19 7" }) }) }), jsxs("div", { children: [jsx("h3", { className: "text-lg font-medium text-gray-900 mb-2", children: "Email Sent Successfully" }), jsxs("p", { className: "text-sm text-gray-600 mb-4", children: ["We've sent a password reset link to ", jsx("strong", { children: email }), ". Please check your inbox and follow the instructions to reset your password."] }), jsx("p", { className: "text-xs text-gray-500", children: "Didn't receive the email? Check your spam folder or try again." })] }), jsxs("div", { className: "space-y-2", children: [jsx("button", { type: "button", onClick: handleTryAgain, className: "w-full px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2", children: "Send Another Email" }), showBackToLogin && (jsx("button", { type: "button", onClick: onCancel, className: "w-full px-4 py-2 text-sm font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2", children: "Back to Login" }))] })] }) }));
+    }
+    return (jsx("div", { className: `forgot-password-form ${className}`, children: jsxs("form", { onSubmit: handleSubmit, className: "space-y-4", children: [jsxs("div", { children: [jsx("label", { htmlFor: "email", className: "block text-sm font-medium text-gray-700 mb-1", children: "Email Address" }), jsx("input", { type: "email", id: "email", name: "email", value: email, onChange: handleInputChange, disabled: isFormDisabled, className: `w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${errors.email
+                                ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                                : 'border-gray-300'} ${isFormDisabled ? 'bg-gray-50 cursor-not-allowed' : ''}`, placeholder: "Enter your email address", autoComplete: "email", autoFocus: true }), errors.email && (jsx("p", { className: "mt-1 text-xs text-red-600", children: errors.email }))] }), errors.general && (jsx("div", { className: "p-3 bg-red-50 border border-red-200 rounded-md", children: jsx("p", { className: "text-sm text-red-600", children: errors.general }) })), jsxs("div", { className: "space-y-2", children: [jsx("button", { type: "submit", disabled: isFormDisabled, className: `w-full px-4 py-2 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${isFormDisabled
+                                ? 'bg-gray-400 cursor-not-allowed'
+                                : 'bg-blue-600 hover:bg-blue-700'}`, children: isSubmitting ? (jsxs("span", { className: "flex items-center justify-center", children: [jsxs("svg", { className: "animate-spin -ml-1 mr-2 h-4 w-4 text-white", fill: "none", viewBox: "0 0 24 24", children: [jsx("circle", { className: "opacity-25", cx: "12", cy: "12", r: "10", stroke: "currentColor", strokeWidth: "4" }), jsx("path", { className: "opacity-75", fill: "currentColor", d: "M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" })] }), "Sending..."] })) : ('Send Reset Email') }), showBackToLogin && (jsx("button", { type: "button", onClick: onCancel, disabled: isFormDisabled, className: "w-full px-4 py-2 text-sm font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50", children: "Back to Login" }))] })] }) }));
+};
+
 const LoginForm = ({ onSuccess, onError, showRememberMe = true, showGoogleLogin = true, showSMSLogin = false, className = '', disabled = false }) => {
     const { login, loginWithGoogle, isLoading } = useAuth();
     const [formData, setFormData] = useState({
@@ -2776,86 +2919,6 @@ const RegisterForm = ({ onSuccess, onError, showDisplayName = true, showPhoneNum
 };
 
 /**
- * useAuthState Hook - Hook for auth state only (no actions)
- */
-const useAuthState = () => {
-    const { user, isLoading, isAuthenticated, error, isInitialized } = useAuth();
-    return {
-        user,
-        isLoading,
-        isAuthenticated,
-        error,
-        isInitialized
-    };
-};
-
-const AuthGuard = ({ children, requireAuth = true, requireEmailVerification = false, requiredPermissions = [], fallback, loadingComponent, unauthorizedComponent, redirectTo, onUnauthorized }) => {
-    const { user, isLoading, isAuthenticated, isInitialized } = useAuthState();
-    // Show loading while initializing
-    if (!isInitialized || isLoading) {
-        if (loadingComponent) {
-            return jsx(Fragment, { children: loadingComponent });
-        }
-        return (jsxs("div", { className: "auth-guard-loading flex items-center justify-center min-h-screen", children: [jsx("div", { className: "animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" }), jsx("span", { className: "ml-2 text-gray-600", children: "Loading..." })] }));
-    }
-    // Check authentication requirement
-    if (requireAuth && !isAuthenticated) {
-        if (redirectTo && typeof window !== 'undefined') {
-            window.location.href = redirectTo;
-            return null;
-        }
-        if (onUnauthorized) {
-            onUnauthorized();
-        }
-        if (unauthorizedComponent) {
-            return jsx(Fragment, { children: unauthorizedComponent });
-        }
-        if (fallback) {
-            return jsx(Fragment, { children: fallback });
-        }
-        return (jsx("div", { className: "auth-guard-unauthorized flex items-center justify-center min-h-screen", children: jsxs("div", { className: "text-center", children: [jsx("h2", { className: "text-xl font-semibold text-gray-900 mb-2", children: "Authentication Required" }), jsx("p", { className: "text-gray-600", children: "Please sign in to access this page." })] }) }));
-    }
-    // Check email verification requirement
-    if (requireEmailVerification && user && !user.emailVerified) {
-        if (unauthorizedComponent) {
-            return jsx(Fragment, { children: unauthorizedComponent });
-        }
-        if (fallback) {
-            return jsx(Fragment, { children: fallback });
-        }
-        return (jsx("div", { className: "auth-guard-email-verification flex items-center justify-center min-h-screen", children: jsxs("div", { className: "text-center max-w-md mx-auto px-4", children: [jsx("div", { className: "mb-4", children: jsx("svg", { className: "h-12 w-12 text-yellow-500 mx-auto", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", children: jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" }) }) }), jsx("h2", { className: "text-xl font-semibold text-gray-900 mb-2", children: "Email Verification Required" }), jsx("p", { className: "text-gray-600 mb-4", children: "Please verify your email address to access this page. Check your inbox for a verification link." }), jsx("button", { onClick: () => {
-                            // This would trigger email verification resend
-                            // Implementation depends on how you want to handle this
-                        }, className: "text-blue-600 hover:text-blue-500 text-sm font-medium", children: "Resend verification email" })] }) }));
-    }
-    // Check permission requirements
-    if (requiredPermissions.length > 0 && user) {
-        // This is a simplified permission check
-        // In a real implementation, you'd check user.customClaims or call a permission service
-        const userPermissions = user.customClaims?.permissions || [];
-        const hasAllPermissions = requiredPermissions.every(permission => userPermissions.includes(permission));
-        if (!hasAllPermissions) {
-            if (onUnauthorized) {
-                onUnauthorized();
-            }
-            if (unauthorizedComponent) {
-                return jsx(Fragment, { children: unauthorizedComponent });
-            }
-            if (fallback) {
-                return jsx(Fragment, { children: fallback });
-            }
-            return (jsx("div", { className: "auth-guard-insufficient-permissions flex items-center justify-center min-h-screen", children: jsxs("div", { className: "text-center", children: [jsx("div", { className: "mb-4", children: jsx("svg", { className: "h-12 w-12 text-red-500 mx-auto", fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", children: jsx("path", { strokeLinecap: "round", strokeLinejoin: "round", strokeWidth: 2, d: "M12 15v2m-6 0h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" }) }) }), jsx("h2", { className: "text-xl font-semibold text-gray-900 mb-2", children: "Insufficient Permissions" }), jsx("p", { className: "text-gray-600", children: "You don't have the required permissions to access this page." })] }) }));
-        }
-    }
-    // All checks passed, render children
-    return jsx(Fragment, { children: children });
-};
-// Convenience components for common use cases
-const ProtectedRoute = ({ children, fallback }) => (jsx(AuthGuard, { requireAuth: true, fallback: fallback, children: children }));
-const PublicRoute = ({ children }) => (jsx(AuthGuard, { requireAuth: false, children: children }));
-const VerifiedRoute = ({ children, fallback }) => (jsx(AuthGuard, { requireAuth: true, requireEmailVerification: true, fallback: fallback, children: children }));
-
-/**
  * useAuthActions Hook - Hook for auth actions only (no state)
  */
 const useAuthActions = () => {
@@ -2876,5 +2939,5 @@ const useAuthActions = () => {
     };
 };
 
-export { AuthConfigValidator, AuthErrorCode, AuthErrorFactory, AuthGuard, AuthProvider, AuthStateStatus, DIContainer, FirebaseConfigService, GoogleLoginUseCase, LocalStorageService, LoginForm, LoginUseCase, LogoutUseCase, ProtectedRoute, PublicRoute, RegisterForm, RegisterUseCase, SMSLoginUseCase, ValidationServiceImpl, VerifiedRoute, useAuth, useAuthActions, useAuthContext, useAuthState };
+export { AuthConfigValidator, AuthErrorCode, AuthErrorFactory, AuthGuard, AuthProvider, AuthStateStatus, DIContainer, FirebaseConfigService, ForgotPasswordForm, GoogleLoginUseCase, LocalStorageService, LoginForm, LoginUseCase, LogoutUseCase, ProtectedRoute, PublicRoute, RegisterForm, RegisterUseCase, SMSLoginUseCase, ValidationServiceImpl, VerifiedRoute, useAuth, useAuthActions, useAuthContext, useAuthState };
 //# sourceMappingURL=index.esm.js.map

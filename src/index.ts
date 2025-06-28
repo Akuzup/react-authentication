@@ -1,9 +1,9 @@
 /**
  * React Authentication Module
- * 
+ *
  * A complete, reusable authentication module built with Clean Architecture principles.
  * Supports Firebase Auth with email/password, Google OAuth, and SMS authentication.
- * 
+ *
  * @author Your Organization
  * @version 1.0.0
  */
@@ -26,13 +26,16 @@ export { LocalStorageService } from './infrastructure/storage/LocalStorageServic
 export { ValidationServiceImpl } from './infrastructure/validation/ValidationServiceImpl'
 
 // Main exports for easy usage
-export { AuthGuard, LoginForm, ProtectedRoute, PublicRoute, RegisterForm, VerifiedRoute } from './presentation/components'
+export { AuthGuard, ProtectedRoute, PublicRoute, VerifiedRoute } from './presentation/components'
+export { ForgotPasswordForm } from './presentation/components/ForgotPasswordForm'
+export { LoginForm } from './presentation/components/LoginForm'
+export { RegisterForm } from './presentation/components/RegisterForm'
 export { AuthProvider, useAuth } from './presentation/providers/AuthContext'
 
 // Types for TypeScript users
 export type {
   AuthConfig,
-  AuthContextValue, AuthError, AuthGuardProps, AuthState, LoginFormProps,
+  AuthContextValue, AuthError, AuthGuardProps, AuthState, ForgotPasswordFormProps, LoginFormProps,
   RegisterFormProps, User
 } from './presentation/types'
 
